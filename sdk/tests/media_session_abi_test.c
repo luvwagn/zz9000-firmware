@@ -235,7 +235,7 @@ static int test_request_builders(void)
       ZZ9K_STATUS_OK)
     return 18;
   if (zz9k_request_media_session_status(
-          &request, 9U, ZZ9K_MEDIA_STATUS_PROFILE + 1U, 0U) !=
+          &request, 9U, ZZ9K_MEDIA_STATUS_OUTPUT + 1U, 0U) !=
       ZZ9K_STATUS_BAD_REQUEST)
     return 19;
   return 0;
@@ -373,7 +373,7 @@ static int test_reply_decoders(void)
     return 16;
   reply.opcode = ZZ9K_OP_MEDIA_SESSION_STATUS;
   zz9k_put_be32(&reply.payload.inline_data[8],
-                ZZ9K_MEDIA_STATUS_PROFILE + 1U);
+                ZZ9K_MEDIA_STATUS_OUTPUT + 1U);
   if (zz9k_reply_media_session_status(&reply, &status_result) !=
       ZZ9K_STATUS_INTERNAL_ERROR)
     return 17;
@@ -414,6 +414,140 @@ static int test_reply_decoders(void)
   return 0;
 }
 
+/* Shared-buffer output (ZZ9K_VIDEO_OUTPUT_SHARED_BUFFER). */
+static int test_shared_buffer_output(void)
+{
+  ZZ9KRequest request;
+  ZZ9KMailboxEntry reply;
+  ZZ9KMediaSessionOutputDesc desc;
+  ZZ9KMediaSessionMainResult main_result;
+  ZZ9KMediaSessionStatusResult status_result;
+  const uint8_t *payload;
+
+  if (ZZ9K_OP_MEDIA_SESSION_OUTPUT_CONFIG != 0x0b0eU) return 1;
+  if (ZZ9K_VIDEO_OUTPUT_SHARED_BUFFER != 2U) return 2;
+  if (ZZ9K_VIDEO_OPCODE_COUNT_SHARED_OUTPUT != 15U) return 3;
+  if (sizeof(ZZ9KMediaSessionOutputPayload) != 48U) return 4;
+  if (ZZ9K_MEDIA_SESSION_RESULT_OUTPUT_SLOT1 != (1U << 15)) return 5;
+  if (ZZ9K_MEDIA_SESSION_RESULT_OUTPUT_PENDING != (1U << 16)) return 6;
+  if (ZZ9K_MEDIA_STATUS_OUTPUT != 6U) return 7;
+  if (ZZ9K_MEDIA_OUTPUT_DEPTH(5U) != 5U ||
+      ZZ9K_MEDIA_OUTPUT_PLANAR_INTERLEAVED != (1U << 4) ||
+      ZZ9K_MEDIA_OUTPUT_DITHER_ORDERED != (1U << 5) ||
+      ZZ9K_MEDIA_OUTPUT_DITHER_DIFFUSION != (1U << 6) ||
+      ZZ9K_MEDIA_OUTPUT_PALETTE_HOST != (1U << 7) ||
+      ZZ9K_MEDIA_OUTPUT_SCALE_NEAREST != (1U << 8))
+    return 8;
+
+  memset(&desc, 0, sizeof(desc));
+  desc.session = 9U;
+  desc.buffer_handle = 3U;
+  desc.buffer_offset = 16U;
+  desc.slot_stride = 76800U;
+  desc.width = 320U;
+  desc.height = 240U;
+  desc.format = ZZ9K_SURFACE_FORMAT_PLANAR;
+  desc.pitch = 40U;
+  desc.flags = ZZ9K_MEDIA_OUTPUT_DEPTH(8U) | ZZ9K_MEDIA_OUTPUT_DITHER_ORDERED;
+  desc.palette_handle = 4U;
+  desc.palette_offset = 0U;
+  if (zz9k_request_media_session_output(&request, &desc) != ZZ9K_STATUS_OK)
+    return 9;
+  payload = request.entry.payload.inline_data;
+  if (request.entry.opcode != ZZ9K_OP_MEDIA_SESSION_OUTPUT_CONFIG ||
+      request.entry.payload_len != 48U ||
+      zz9k_get_be32(&payload[0]) != 9U ||
+      zz9k_get_be32(&payload[4]) != 3U ||
+      zz9k_get_be32(&payload[8]) != 16U ||
+      zz9k_get_be32(&payload[12]) != 76800U ||
+      zz9k_get_be32(&payload[16]) != 320U ||
+      zz9k_get_be32(&payload[20]) != 240U ||
+      zz9k_get_be32(&payload[24]) != ZZ9K_SURFACE_FORMAT_PLANAR ||
+      zz9k_get_be32(&payload[28]) != 40U ||
+      zz9k_get_be32(&payload[32]) !=
+          (8U | ZZ9K_MEDIA_OUTPUT_DITHER_ORDERED) ||
+      zz9k_get_be32(&payload[36]) != 4U ||
+      zz9k_get_be32(&payload[40]) != 0U ||
+      zz9k_get_be32(&payload[44]) != 0U)
+    return 10;
+  /* Rejected locally: ARGB8888 is not an output format, both dithers, an
+   * unknown flag, a host palette without a palette buffer. */
+  desc.format = ZZ9K_SURFACE_FORMAT_ARGB8888;
+  if (zz9k_request_media_session_output(&request, &desc) !=
+      ZZ9K_STATUS_BAD_REQUEST)
+    return 11;
+  desc.format = ZZ9K_SURFACE_FORMAT_PLANAR;
+  desc.flags |= ZZ9K_MEDIA_OUTPUT_DITHER_DIFFUSION;
+  if (zz9k_request_media_session_output(&request, &desc) !=
+      ZZ9K_STATUS_BAD_REQUEST)
+    return 12;
+  desc.flags = 1U << 9;
+  if (zz9k_request_media_session_output(&request, &desc) !=
+      ZZ9K_STATUS_BAD_REQUEST)
+    return 13;
+  desc.flags = ZZ9K_MEDIA_OUTPUT_PALETTE_HOST;
+  desc.palette_handle = 0U;
+  if (zz9k_request_media_session_output(&request, &desc) !=
+      ZZ9K_STATUS_BAD_REQUEST)
+    return 14;
+  desc.flags = 9U;
+  desc.palette_handle = 4U;
+  if (zz9k_request_media_session_output(&request, &desc) !=
+      ZZ9K_STATUS_BAD_REQUEST)
+    return 15;
+  if (zz9k_request_media_session_status(
+          &request, 9U, ZZ9K_MEDIA_STATUS_OUTPUT, 0U) != ZZ9K_STATUS_OK)
+    return 16;
+
+  /* A PRESENT reply naming slot 1, and an OUTPUT_CONFIG reply, decode. */
+  memset(&reply, 0, sizeof(reply));
+  reply.opcode = ZZ9K_OP_MEDIA_SESSION_PRESENT;
+  reply.status = ZZ9K_STATUS_OK;
+  reply.payload_len = 48U;
+  zz9k_put_be32(&reply.payload.inline_data[0], 9U);
+  zz9k_put_be32(&reply.payload.inline_data[4],
+                ZZ9K_MEDIA_SESSION_STATE_READY);
+  zz9k_put_be32(&reply.payload.inline_data[44],
+                ZZ9K_MEDIA_SESSION_RESULT_PRESENTED |
+                ZZ9K_MEDIA_SESSION_RESULT_OUTPUT_SLOT1 |
+                ZZ9K_MEDIA_SESSION_RESULT_OUTPUT_PENDING);
+  if (zz9k_reply_media_session_main(&reply, ZZ9K_OP_MEDIA_SESSION_PRESENT,
+                                    &main_result) != ZZ9K_STATUS_OK ||
+      (main_result.flags & ZZ9K_MEDIA_SESSION_RESULT_OUTPUT_SLOT1) == 0U)
+    return 17;
+  reply.opcode = ZZ9K_OP_MEDIA_SESSION_OUTPUT_CONFIG;
+  zz9k_put_be32(&reply.payload.inline_data[44], 0U);
+  if (zz9k_reply_media_session_main(
+          &reply, ZZ9K_OP_MEDIA_SESSION_OUTPUT_CONFIG, &main_result) !=
+      ZZ9K_STATUS_OK)
+    return 18;
+
+  /* Status page 6, validated against its own flag namespace. */
+  memset(&reply, 0, sizeof(reply));
+  reply.opcode = ZZ9K_OP_MEDIA_SESSION_STATUS;
+  reply.status = ZZ9K_STATUS_OK;
+  reply.payload_len = 48U;
+  zz9k_put_be32(&reply.payload.inline_data[0], 9U);
+  zz9k_put_be32(&reply.payload.inline_data[4],
+                ZZ9K_MEDIA_SESSION_STATE_READY);
+  zz9k_put_be32(&reply.payload.inline_data[8], ZZ9K_MEDIA_STATUS_OUTPUT);
+  zz9k_put_be32(&reply.payload.inline_data[12],
+                ZZ9K_MEDIA_OUTPUT_STATUS_CONFIGURED |
+                ZZ9K_MEDIA_OUTPUT_STATUS_COMPLETE |
+                ZZ9K_MEDIA_OUTPUT_STATUS_SLOT1);
+  zz9k_put_be32(&reply.payload.inline_data[20], 42U);
+  if (zz9k_reply_media_session_status(&reply, &status_result) !=
+          ZZ9K_STATUS_OK ||
+      status_result.page != ZZ9K_MEDIA_STATUS_OUTPUT ||
+      status_result.value[0] != 42U)
+    return 19;
+  zz9k_put_be32(&reply.payload.inline_data[12], 1U << 3);
+  if (zz9k_reply_media_session_status(&reply, &status_result) !=
+      ZZ9K_STATUS_INTERNAL_ERROR)
+    return 20;
+  return 0;
+}
+
 int main(void)
 {
   int status;
@@ -426,5 +560,7 @@ int main(void)
   if (status) return 80 + status;
   status = test_reply_decoders();
   if (status) return 110 + status;
+  status = test_shared_buffer_output();
+  if (status) return 160 + status;
   return 0;
 }

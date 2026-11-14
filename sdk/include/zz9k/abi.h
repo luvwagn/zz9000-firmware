@@ -255,6 +255,10 @@ enum ZZ9KOpcode {
   ZZ9K_OP_MEDIA_SESSION_AUDIO_BIND = ZZ9K_SERVICE_VIDEO + 0x0b,
   ZZ9K_OP_MEDIA_SESSION_AUDIO_UNBIND = ZZ9K_SERVICE_VIDEO + 0x0c,
   ZZ9K_OP_MEDIA_SESSION_CLOSE = ZZ9K_SERVICE_VIDEO + 0x0d,
+  /* Shared-buffer output (ZZ9K_VIDEO_OUTPUT_SHARED_BUFFER): where and how
+   * PRESENT writes pictures. A video service whose opcode_count is 15 or
+   * more has it. */
+  ZZ9K_OP_MEDIA_SESSION_OUTPUT_CONFIG = ZZ9K_SERVICE_VIDEO + 0x0e,
 
   ZZ9K_OP_APP_QUERY = ZZ9K_SERVICE_APP + 0x00,
   ZZ9K_OP_APP_ALLOC_WINDOW = ZZ9K_SERVICE_APP + 0x01,
@@ -1575,6 +1579,27 @@ typedef struct ZZ9KMediaSessionStatusPayload {
   uint8_t reserved[36];
 } ZZ9KMediaSessionStatusPayload;
 
+/* OUTPUT_CONFIG for a ZZ9K_VIDEO_OUTPUT_SHARED_BUFFER session. Two slots of
+ * one picture each start at buffer_offset and buffer_offset + slot_stride
+ * (slot_stride 0: one slot). format is ZZ9K_SURFACE_FORMAT_INDEX8, _PLANAR,
+ * _RGB565 or _RGB555 (big-endian words); pitch is bytes per row, per plane
+ * for PLANAR. The palette buffer holds 256 0x00RRGGBB words. Answered with
+ * the main result. */
+typedef struct ZZ9KMediaSessionOutputPayload {
+  uint8_t session[4];
+  uint8_t buffer_handle[4];
+  uint8_t buffer_offset[4];
+  uint8_t slot_stride[4];
+  uint8_t width[4];
+  uint8_t height[4];
+  uint8_t format[4];
+  uint8_t pitch[4];
+  uint8_t flags[4];
+  uint8_t palette_handle[4];
+  uint8_t palette_offset[4];
+  uint8_t reserved[4];
+} ZZ9KMediaSessionOutputPayload;
+
 typedef struct ZZ9KMediaSessionMainResultPayload {
   uint8_t session[4];
   uint8_t state[4];
@@ -1914,6 +1939,9 @@ typedef char ZZ9KMediaSessionCommandPayload_must_be_48_bytes[
 ];
 typedef char ZZ9KMediaSessionStatusPayload_must_be_48_bytes[
   (sizeof(ZZ9KMediaSessionStatusPayload) == 48U) ? 1 : -1
+];
+typedef char ZZ9KMediaSessionOutputPayload_must_be_48_bytes[
+  (sizeof(ZZ9KMediaSessionOutputPayload) == 48U) ? 1 : -1
 ];
 typedef char ZZ9KMediaSessionMainResultPayload_must_be_48_bytes[
   (sizeof(ZZ9KMediaSessionMainResultPayload) == 48U) ? 1 : -1
@@ -2559,6 +2587,20 @@ typedef struct ZZ9KMediaSessionWriteDesc {
   uint32_t flags;
 } ZZ9KMediaSessionWriteDesc;
 
+typedef struct ZZ9KMediaSessionOutputDesc {
+  uint32_t session;
+  uint32_t buffer_handle;
+  uint32_t buffer_offset;
+  uint32_t slot_stride;
+  uint32_t width;
+  uint32_t height;
+  uint32_t format;
+  uint32_t pitch;
+  uint32_t flags;
+  uint32_t palette_handle;
+  uint32_t palette_offset;
+} ZZ9KMediaSessionOutputDesc;
+
 typedef struct ZZ9KMediaSessionMainResult {
   uint32_t session;
   uint32_t state;
@@ -2916,8 +2958,34 @@ enum ZZ9KVideoContainer {
 };
 
 enum ZZ9KVideoOutputFormat {
-  ZZ9K_VIDEO_OUTPUT_DIRECT_OVERLAY = 1U
+  ZZ9K_VIDEO_OUTPUT_DIRECT_OVERLAY = 1U,
+  /* Pictures scaled and converted on the card into a host-visible shared
+   * buffer, set with ZZ9K_OP_MEDIA_SESSION_OUTPUT_CONFIG. Needs no PIP. */
+  ZZ9K_VIDEO_OUTPUT_SHARED_BUFFER = 2U
 };
+
+/* Video service opcode count from which OUTPUT_CONFIG exists. */
+#define ZZ9K_VIDEO_OPCODE_COUNT_SHARED_OUTPUT 15U
+
+/* ZZ9KMediaSessionOutputPayload.flags. */
+enum ZZ9KMediaOutputFlags {
+  /* INDEX8 and PLANAR: bits per pixel, 1..8 (0 means 8). */
+  ZZ9K_MEDIA_OUTPUT_DEPTH_MASK = 0x0fU,
+  /* PLANAR: row y of plane p at (y * depth + p) * pitch, as BMF_INTERLEAVED.
+   * Clear: plane p row y at (p * height + y) * pitch. */
+  ZZ9K_MEDIA_OUTPUT_PLANAR_INTERLEAVED = 1U << 4,
+  /* 4x4 Bayer, stable from picture to picture. */
+  ZZ9K_MEDIA_OUTPUT_DITHER_ORDERED = 1U << 5,
+  /* Floyd-Steinberg; not together with ORDERED. */
+  ZZ9K_MEDIA_OUTPUT_DITHER_DIFFUSION = 1U << 6,
+  /* The card reads 1 << depth pens from the palette buffer and maps each
+   * pixel to the nearest. Clear: the card uses its fixed RGB-cube palette
+   * and writes it to the palette buffer, if one is given. */
+  ZZ9K_MEDIA_OUTPUT_PALETTE_HOST = 1U << 7,
+  /* Default: filtered (bilinear, area-averaging when shrinking). */
+  ZZ9K_MEDIA_OUTPUT_SCALE_NEAREST = 1U << 8
+};
+#define ZZ9K_MEDIA_OUTPUT_DEPTH(n) ((uint32_t)(n) & ZZ9K_MEDIA_OUTPUT_DEPTH_MASK)
 
 enum ZZ9KVideoSessionWriteFlags {
   ZZ9K_VIDEO_SESSION_WRITE_EOF = 1U << 0
@@ -2987,7 +3055,13 @@ enum ZZ9KMediaSessionResultFlags {
   ZZ9K_MEDIA_SESSION_RESULT_AUDIO_BOUND = 1U << 11,
   ZZ9K_MEDIA_SESSION_RESULT_AUDIO_PLAYING = 1U << 12,
   ZZ9K_MEDIA_SESSION_RESULT_AUDIO_DRAINED = 1U << 13,
-  ZZ9K_MEDIA_SESSION_RESULT_AUDIO_UNDERRUN = 1U << 14
+  ZZ9K_MEDIA_SESSION_RESULT_AUDIO_UNDERRUN = 1U << 14,
+  /* PRESENT of a shared-buffer session: the picture goes to slot 1 (clear:
+   * slot 0). */
+  ZZ9K_MEDIA_SESSION_RESULT_OUTPUT_SLOT1 = 1U << 15,
+  /* ...and is still being written. It is complete once status page
+   * ZZ9K_MEDIA_STATUS_OUTPUT counts it, or the next DECODE is not BUSY. */
+  ZZ9K_MEDIA_SESSION_RESULT_OUTPUT_PENDING = 1U << 16
 };
 
 /* Palette (CLUT) limits for ZZ9K_OP_QUERY_PALETTE. The INDEX8 table has 256
@@ -3036,7 +3110,19 @@ enum ZZ9KMediaStatusPage {
    * (microseconds << 32) | calls, indexed by ZZ9KMediaProfileStage.
    * Firmware without the page answers BAD_REQUEST, so a client reports
    * profiling as unavailable rather than failing. */
-  ZZ9K_MEDIA_STATUS_PROFILE = 5U
+  ZZ9K_MEDIA_STATUS_PROFILE = 5U,
+  /* Shared-buffer output: pictures completely written, the newest one's
+   * video PTS, ZZ9K_MEDIA_PACK_PAIR(width, height), and
+   * (format << 32) | pitch. Flags are ZZ9KMediaOutputStatusFlags. An
+   * overlay session answers with everything zero. */
+  ZZ9K_MEDIA_STATUS_OUTPUT = 6U
+};
+
+enum ZZ9KMediaOutputStatusFlags {
+  ZZ9K_MEDIA_OUTPUT_STATUS_CONFIGURED = 1U << 0,
+  ZZ9K_MEDIA_OUTPUT_STATUS_COMPLETE = 1U << 1,
+  /* The newest complete picture is in slot 1. */
+  ZZ9K_MEDIA_OUTPUT_STATUS_SLOT1 = 1U << 2
 };
 
 enum ZZ9KMediaProfileStage {

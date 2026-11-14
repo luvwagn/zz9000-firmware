@@ -1089,6 +1089,53 @@ static inline int zz9k_request_media_session_write(
   return ZZ9K_STATUS_OK;
 }
 
+static inline int zz9k_request_media_session_output(
+    ZZ9KRequest *request,
+    const ZZ9KMediaSessionOutputDesc *desc)
+{
+  ZZ9KMediaSessionOutputPayload *payload;
+  uint32_t known = ZZ9K_MEDIA_OUTPUT_DEPTH_MASK |
+                   ZZ9K_MEDIA_OUTPUT_PLANAR_INTERLEAVED |
+                   ZZ9K_MEDIA_OUTPUT_DITHER_ORDERED |
+                   ZZ9K_MEDIA_OUTPUT_DITHER_DIFFUSION |
+                   ZZ9K_MEDIA_OUTPUT_PALETTE_HOST |
+                   ZZ9K_MEDIA_OUTPUT_SCALE_NEAREST;
+
+  if (!request || !desc || desc->session == 0U ||
+      desc->buffer_handle == 0U ||
+      desc->buffer_handle == ZZ9K_INVALID_HANDLE ||
+      desc->width == 0U || desc->height == 0U || desc->pitch == 0U ||
+      (desc->format != ZZ9K_SURFACE_FORMAT_INDEX8 &&
+       desc->format != ZZ9K_SURFACE_FORMAT_PLANAR &&
+       desc->format != ZZ9K_SURFACE_FORMAT_RGB565 &&
+       desc->format != ZZ9K_SURFACE_FORMAT_RGB555) ||
+      (desc->flags & ~known) != 0U ||
+      ZZ9K_MEDIA_OUTPUT_DEPTH(desc->flags) > 8U ||
+      ((desc->flags & ZZ9K_MEDIA_OUTPUT_DITHER_ORDERED) != 0U &&
+       (desc->flags & ZZ9K_MEDIA_OUTPUT_DITHER_DIFFUSION) != 0U) ||
+      ((desc->flags & ZZ9K_MEDIA_OUTPUT_PALETTE_HOST) != 0U &&
+       desc->palette_handle == 0U)) {
+    return ZZ9K_STATUS_BAD_REQUEST;
+  }
+
+  zz9k_request_init(request, ZZ9K_OP_MEDIA_SESSION_OUTPUT_CONFIG);
+  request->entry.payload_len = sizeof(*payload);
+  payload = (ZZ9KMediaSessionOutputPayload *)
+      request->entry.payload.inline_data;
+  zz9k_put_be32(payload->session, desc->session);
+  zz9k_put_be32(payload->buffer_handle, desc->buffer_handle);
+  zz9k_put_be32(payload->buffer_offset, desc->buffer_offset);
+  zz9k_put_be32(payload->slot_stride, desc->slot_stride);
+  zz9k_put_be32(payload->width, desc->width);
+  zz9k_put_be32(payload->height, desc->height);
+  zz9k_put_be32(payload->format, desc->format);
+  zz9k_put_be32(payload->pitch, desc->pitch);
+  zz9k_put_be32(payload->flags, desc->flags);
+  zz9k_put_be32(payload->palette_handle, desc->palette_handle);
+  zz9k_put_be32(payload->palette_offset, desc->palette_offset);
+  return ZZ9K_STATUS_OK;
+}
+
 static inline int zz9k_media_command_opcode_known(uint16_t opcode)
 {
   return opcode == ZZ9K_OP_MEDIA_SESSION_DECODE ||
@@ -1141,7 +1188,7 @@ static inline int zz9k_request_media_session_status(
   ZZ9KMediaSessionStatusPayload *payload;
 
   if (!request || session == 0U ||
-      page > ZZ9K_MEDIA_STATUS_PROFILE ||
+      page > ZZ9K_MEDIA_STATUS_OUTPUT ||
       flags != 0U) {
     return ZZ9K_STATUS_BAD_REQUEST;
   }

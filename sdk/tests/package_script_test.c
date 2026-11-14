@@ -159,6 +159,7 @@ static int check_script(const char *path, const char *name)
   ok &= expect_contains(script, name, "build/zz9k-jpeg-stream-demo");
   ok &= expect_contains(script, name, "build/zz9k-typed-decode-demo");
   ok &= expect_contains(script, name, "build/zz9k-crypto-demo");
+  ok &= expect_contains(script, name, "build/zz9k-shared-video-demo");
   ok &= expect_contains(script, name, "include/zz9k");
   ok &= expect_contains(script, name, "host/include/zz9k");
   ok &= expect_contains(script, name, "amiga/include/proto");
@@ -195,6 +196,8 @@ static int check_script(const char *path, const char *name)
                         "zz9k-typed-decode-demo.c");
   ok &= expect_contains(script, name,
                         "examples/amiga-crypto/zz9k-crypto-demo.c");
+  ok &= expect_contains(script, name,
+                        "examples/amiga-media-shared-buffer/zz9k-shared-video-demo.c");
   if (strstr(name, ".ps1")) {
     ok &= expect_contains(script, name, "Get-FileHash");
     ok &= expect_contains(script, name, "ToLowerInvariant");

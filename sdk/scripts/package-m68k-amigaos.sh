@@ -185,6 +185,7 @@ copy_one "build/zz9k-libsmoke" "C/zz9k-libsmoke"
 copy_one "build/zz9k-app-echo-test" "C/zz9k-app-echo-test"
 copy_one "build/zz9k-library-demo" "C/zz9k-library-demo"
 copy_one "build/zz9k-jpeg-stream-demo" "C/zz9k-jpeg-stream-demo"
+copy_one "build/zz9k-shared-video-demo" "C/zz9k-shared-video-demo"
 copy_one "build/zz9k-typed-decode-demo" "C/zz9k-typed-decode-demo"
 copy_one "build/zz9k-crypto-demo" "C/zz9k-crypto-demo"
 
@@ -218,6 +219,8 @@ copy_one "examples/amiga-typed-decode/zz9k-typed-decode-demo.c" \
   "Examples/zz9k-typed-decode-demo.c"
 copy_one "examples/amiga-crypto/zz9k-crypto-demo.c" \
   "Examples/zz9k-crypto-demo.c"
+copy_one "examples/amiga-media-shared-buffer/zz9k-shared-video-demo.c" \
+  "Examples/zz9k-shared-video-demo.c"
 
 (
   cd "$PACKAGE_ROOT"

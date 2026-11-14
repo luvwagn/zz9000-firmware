@@ -158,6 +158,7 @@ Copy-One "build/zz9k-libdecode" "C/zz9k-libdecode"
 Copy-One "build/zz9k-libsmoke" "C/zz9k-libsmoke"
 Copy-One "build/zz9k-library-demo" "C/zz9k-library-demo"
 Copy-One "build/zz9k-jpeg-stream-demo" "C/zz9k-jpeg-stream-demo"
+Copy-One "build/zz9k-shared-video-demo" "C/zz9k-shared-video-demo"
 Copy-One "build/zz9k-typed-decode-demo" "C/zz9k-typed-decode-demo"
 Copy-One "build/zz9k-crypto-demo" "C/zz9k-crypto-demo"
 
@@ -207,6 +208,8 @@ Copy-One "examples/amiga-typed-decode/zz9k-typed-decode-demo.c" `
   "Examples/zz9k-typed-decode-demo.c"
 Copy-One "examples/amiga-crypto/zz9k-crypto-demo.c" `
   "Examples/zz9k-crypto-demo.c"
+Copy-One "examples/amiga-media-shared-buffer/zz9k-shared-video-demo.c" `
+  "Examples/zz9k-shared-video-demo.c"
 
 $Manifest = Join-Path $PackageRoot "MANIFEST.sha256"
 Get-ChildItem -LiteralPath $PackageRoot -Recurse -File |

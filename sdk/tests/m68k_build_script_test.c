@@ -175,6 +175,8 @@ static int check_script(const char *path, const char *name)
                         "zz9k-typed-decode-demo.c");
   ok &= expect_contains(script, name,
                         "examples/amiga-crypto/zz9k-crypto-demo.c");
+  ok &= expect_contains(script, name,
+                        "examples/amiga-media-shared-buffer/zz9k-shared-video-demo.c");
   ok &= expect_contains(script, name, "build/zz9k-libsmoke");
   ok &= expect_contains(script, name, "build/zz9k-libcancel");
   ok &= expect_contains(script, name, "build/zz9k-libwait");
@@ -190,6 +192,7 @@ static int check_script(const char *path, const char *name)
   ok &= expect_contains(script, name, "build/zz9k-jpeg-stream-demo");
   ok &= expect_contains(script, name, "build/zz9k-typed-decode-demo");
   ok &= expect_contains(script, name, "build/zz9k-crypto-demo");
+  ok &= expect_contains(script, name, "build/zz9k-shared-video-demo");
   ok &= expect_contains(script, name, "build/zz9k-hash");
   ok &= expect_contains(script, name, "build/zz9k-inflate");
   ok &= expect_contains(script, name, "build/zz9k-archive");

@@ -76,6 +76,8 @@ m68k-amigaos-gcc $LIBCFLAGS examples/amiga-typed-decode/zz9k-typed-decode-demo.c
   -o build/zz9k-typed-decode-demo
 m68k-amigaos-gcc $LIBCFLAGS examples/amiga-crypto/zz9k-crypto-demo.c \
   -o build/zz9k-crypto-demo
+m68k-amigaos-gcc $LIBCFLAGS examples/amiga-media-shared-buffer/zz9k-shared-video-demo.c \
+  -o build/zz9k-shared-video-demo
 m68k-amigaos-gcc $CFLAGS build/m68k/zz9k_host.o tools/zz9k-info.c -o build/zz9k-info
 m68k-amigaos-gcc $CFLAGS build/m68k/zz9k_host.o tools/zz9k-services.c -o build/zz9k-services
 m68k-amigaos-gcc $CFLAGS build/m68k/zz9k_host.o tools/zz9k-fabriclease.c -o build/zz9k-fabriclease

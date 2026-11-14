@@ -930,6 +930,50 @@ the stream's native rate (8000..96000 Hz) and is converted by the card's audio
 pump. Timestamps from the Matroska container are converted internally to the
 90 kHz media clock using `TimestampScale`.
 
+### Shared-buffer output (proposal)
+
+*Proposed in [#238](https://github.com/BlitterStudio/zz9000-firmware/issues/238);
+the Amiberry emulator implements it, the card's firmware does not yet.*
+
+A session begun with `output_format = ZZ9K_VIDEO_OUTPUT_SHARED_BUFFER` needs no
+PIP. Each PRESENT scales and converts the held picture on the card and writes
+it to a host-visible shared buffer, so a program can show video on a native
+OCS/ECS/AGA screen, on another RTG card, or composite it with its own graphics.
+Find it with `ZZ9KQueryService(ZZ9K_SERVICE_VIDEO)`: `opcode_count` is
+`ZZ9K_VIDEO_OPCODE_COUNT_SHARED_OUTPUT` (15) or more. Older firmware answers
+BEGIN with `ZZ9K_STATUS_UNSUPPORTED`.
+
+After BEGIN, `ZZ9K_OP_MEDIA_SESSION_OUTPUT_CONFIG`
+(`zz9k_request_media_session_output()`) names the buffer and its two slots
+(`slot_stride` 0 for one), the output size, the format and the pitch:
+
+| Format | One picture |
+|---|---|
+| `ZZ9K_SURFACE_FORMAT_INDEX8` | `pitch * height`, one pen per byte |
+| `ZZ9K_SURFACE_FORMAT_PLANAR` | `pitch * height * depth`: plane *p* row *y* at `(p * height + y) * pitch`, or with `ZZ9K_MEDIA_OUTPUT_PLANAR_INTERLEAVED` at `(y * depth + p) * pitch` (a `BMF_INTERLEAVED` BitMap) |
+| `ZZ9K_SURFACE_FORMAT_RGB565`, `_RGB555` | `pitch * height`, big-endian words |
+
+`ZZ9K_MEDIA_OUTPUT_DEPTH(n)` sets 1-8 bits per pixel for INDEX8 and PLANAR.
+Without `ZZ9K_MEDIA_OUTPUT_PALETTE_HOST` the card uses a fixed RGB cube (6x7x6
+at depth 8, 5x5x5, 4x4x4, 3x3x3, 2x3x2, 2x2x2, then 4 and 2 greys) and writes
+it, as 256 `0x00RRGGBB` words, to the palette buffer when the output is
+configured; with it, the card reads the host's pens and maps each pixel to the
+nearest. `ZZ9K_MEDIA_OUTPUT_DITHER_ORDERED` (recommended for video) or
+`_DITHER_DIFFUSION` dither every format, and `ZZ9K_MEDIA_OUTPUT_SCALE_NEAREST`
+replaces the default filtered scaling.
+
+PRESENT writes to the slot not written last, starting with slot 0, and sets
+`ZZ9K_MEDIA_SESSION_RESULT_OUTPUT_SLOT1` when that is slot 1. If it also sets
+`ZZ9K_MEDIA_SESSION_RESULT_OUTPUT_PENDING`, the picture is complete once status
+page `ZZ9K_MEDIA_STATUS_OUTPUT` counts it (`value[0]`) or the next DECODE is
+not BUSY. That page also gives the newest picture's PTS, size, format and
+pitch. Read one slot while the card writes the other.
+
+`zz9k-shared-video-demo FILE [DEPTH] [ORDERED|DIFFUSION|NONE] [NEAREST]`
+(`examples/amiga-media-shared-buffer/`) plays an MPEG-1 or MPEG-2 Program
+Stream on an 8-plane AGA screen this way (`5` for OCS/ECS), copying each
+picture into chip RAM.
+
 ## Audio Decode Jobs
 
 The audio service reserves explicit feature flags for this service family:
